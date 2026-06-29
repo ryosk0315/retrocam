@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>RetroCam</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  min-height:100%;
+  background:#111;
+  font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;
+  display:flex;flex-direction:column;align-items:center;
+  padding:12px 8px 24px;gap:12px;
+  color:#f0f0f0;
+}
+
+/* ---- device selector ---- */
+.dev-selector{
+  display:flex;gap:5px;
+  background:#1e1e1e;border:0.5px solid rgba(255,255,255,0.1);
+  border-radius:20px;padding:4px;
+}
+.dev-btn{
+  border:none;background:transparent;border-radius:16px;
+  padding:7px 14px;font-size:11px;font-weight:600;
+  color:#888;cursor:pointer;letter-spacing:0.5px;transition:all .15s;
+}
+.dev-btn.active{background:#2a2a2a;color:#f0f0f0;border:0.5px solid rgba(255,255,255,0.18);}
+
+/* ---- device shell wrapper ---- */
+.shell-wrap{
+  position:relative;
+  display:flex;flex-direction:column;align-items:center;
+  width:100%;max-width:400px;
+}
+
+/* ---- 3DS shell ---- */
+.shell-3ds{
+  width:320px;
+  background:linear-gradient(180deg,#c8c0d8 0%,#b8b0c8 100%);
+  border-radius:12px 12px 6px 6px;
+  padding:10px 14px 8px;
+  box-shadow:0 2px 0 #8880a0,0 4px 0 #6660808,0 6px 12px rgba(0,0,0,0.5);
+  position:relative;
+}
+.shell-3ds .top-half{
+  background:linear-gradient(180deg,#d0c8e0 0%,#b8b0c8 100%);
+  border-radius:10px 10px 4px 4px;
+  padding:6px;
+  margin-bottom:5px;
+  border:2px solid #9890b0;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.shell-3ds .hinge{
+  height:8px;
+  background:linear-gradient(180deg,#7870908 0%,#8880a0 100%);
+  margin:0 10px;
+  border-radius:0;
+  border-left:2px solid #6660808;
+  border-right:2px solid #6660808;
+}
+.shell-3ds .bottom-half{
+  background:linear-gradient(180deg,#c0b8d0 0%,#b0a8c0 100%);
+  border-radius:4px 4px 16px 16px;
+  padding:8px 10px 12px;
+  border:2px solid #9890b0;
+  border-top:none;
+}
+.shell-3ds .screen-bezel{
+  background:#000;
+  border-radius:4px;
+  overflow:hidden;
+  position:relative;
+  aspect-ratio:5/3;
+}
+.shell-3ds .speakers{
+  display:flex;justify-content:space-between;
+  padding:3px 4px 0;
+}
+.shell-3ds .speaker-dots{
+  display:flex;gap:2px;align-items:center;
+}
+.shell-3ds .speaker-dot{
+  width:3px;height:3px;border-radius:50%;
+  background:#8880a0;opacity:0.7;
+}
+.shell-3ds .d-pad-area{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:4px 0 2px;
+}
+.shell-3ds .circle-pad{
+  width:22px;height:22px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#555,#222);
+  border:1px solid #333;
+  box-shadow:0 2px 4px rgba(0,0,0,0.5);
+  flex-shrink:0;
+}
+.shell-3ds .abxy{
+  display:grid;grid-template-columns:1fr 1fr;gap:3px;
+  flex-shrink:0;
+}
+.shell-3ds .btn-abxy{
+  width:14px;height:14px;border-radius:50%;
+  font-size:7px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  color:rgba(0,0,0,0.5);cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,0.4);
+}
+.shell-3ds .center-btns{
+  display:flex;gap:6px;align-items:center;justify-content:center;
+  flex:1;
+}
+.shell-3ds .small-btn{
+  width:20px;height:8px;border-radius:4px;
+  background:#8880a0;border:1px solid #6660808;
+  cursor:pointer;font-size:5px;color:#5550708;
+  display:flex;align-items:center;justify-content:center;
+}
+.shell-3ds .shutter-3ds{
+  width:36px;height:36px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#e0e0e0,#b0b0b0);
+  border:2px solid #888;
+  box-shadow:0 2px 4px rgba(0,0,0,0.4);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:transform .1s;
+}
+.shell-3ds .shutter-3ds:active{transform:scale(0.92);}
+.shell-3ds .shoulder-btns{
+  display:flex;justify-content:space-between;
+  margin:0 -14px;padding:0 2px;
+}
+.shell-3ds .shoulder-btn{
+  width:40px;height:8px;
+  background:linear-gradient(180deg,#b0a8c0,#9890b0);
+  border-radius:4px 4px 0 0;
+  border:1px solid #8880a0;border-bottom:none;
+}
+.shell-3ds .camera-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:#333;border:1px solid #222;
+  position:absolute;top:4px;left:50%;transform:translateX(-50%);
+}
+.shell-3ds .top-screen-label{
+  font-size:8px;color:#8880a0;text-align:center;
+  letter-spacing:1px;padding-bottom:2px;
+}
+
+/* ---- Vita shell ---- */
+.shell-vita{
+  width:340px;
+  background:linear-gradient(180deg,#1a1a2e 0%,#111122 100%);
+  border-radius:20px;
+  padding:10px 8px 14px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.05);
+  position:relative;
+}
+.shell-vita .vita-top{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:0 4px 6px;
+}
+.shell-vita .vita-stick{
+  width:20px;height:20px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#333,#111);
+  border:1px solid #444;flex-shrink:0;
+}
+.shell-vita .vita-screen-wrap{
+  flex:1;margin:0 6px;
+  background:#000;
+  border-radius:4px;overflow:hidden;
+  aspect-ratio:16/9;position:relative;
+  border:1px solid #333;
+}
+.shell-vita .vita-abxy{
+  display:grid;grid-template-columns:1fr 1fr;gap:3px;flex-shrink:0;
+}
+.shell-vita .vita-btn{
+  width:14px;height:14px;border-radius:50%;
+  font-size:7px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  color:rgba(0,0,0,0.5);cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,0.5);
+}
+.shell-vita .vita-bottom{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:6px 4px 0;
+}
+.shell-vita .vita-dpad{
+  width:36px;height:36px;position:relative;flex-shrink:0;
+}
+.shell-vita .vita-dpad-h,.shell-vita .vita-dpad-v{
+  position:absolute;background:#2a2a3a;border-radius:2px;border:1px solid #333;
+}
+.shell-vita .vita-dpad-h{
+  width:100%;height:33%;top:33%;left:0;
+}
+.shell-vita .vita-dpad-v{
+  height:100%;width:33%;top:0;left:33%;
+}
+.shell-vita .vita-center{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+}
+.shell-vita .vita-shutter{
+  width:34px;height:34px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#333,#111);
+  border:2px solid #444;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .1s;
+  box-shadow:0 2px 4px rgba(0,0,0,0.5);
+}
+.shell-vita .vita-shutter:active{transform:scale(0.92);}
+.shell-vita .vita-small-btns{
+  display:flex;gap:8px;
+}
+.shell-vita .vita-small-btn{
+  width:18px;height:7px;border-radius:3px;
+  background:#2a2a3a;border:0.5px solid #444;cursor:pointer;
+}
+.shell-vita .vita-right-stick{
+  width:20px;height:20px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#333,#111);
+  border:1px solid #444;flex-shrink:0;
+}
+.shell-vita .vita-shoulder{
+  display:flex;justify-content:space-between;
+  padding:0 6px;margin-bottom:4px;
+}
+.shell-vita .vita-shoulder-btn{
+  width:44px;height:8px;
+  background:#222233;border-radius:4px;
+  border:0.5px solid #333;
+}
+.shell-vita .vita-led{
+  width:6px;height:6px;border-radius:50%;
+  background:#00c8ff;opacity:0.6;
+  box-shadow:0 0 6px #00c8ff;
+  position:absolute;top:8px;right:12px;
+}
+.shell-vita .vita-camera{
+  width:5px;height:5px;border-radius:50%;
+  background:#222;border:1px solid #111;
+  position:absolute;top:8px;left:12px;
+}
+
+/* ---- DSi shell ---- */
+.shell-dsi{
+  width:300px;
+  background:linear-gradient(180deg,#e8e0c8 0%,#d8d0b8 100%);
+  border-radius:14px 14px 8px 8px;
+  padding:10px 12px 10px;
+  box-shadow:0 2px 0 #b0a880,0 4px 12px rgba(0,0,0,0.4);
+  position:relative;
+}
+.shell-dsi .dsi-top{
+  background:linear-gradient(180deg,#f0e8d0,#ddd8c0);
+  border-radius:10px 10px 2px 2px;
+  padding:6px;margin-bottom:4px;
+  border:1.5px solid #c0b890;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.5);
+}
+.shell-dsi .dsi-hinge{
+  height:7px;margin:0 12px;
+  background:linear-gradient(180deg,#b0a880,#c0b890);
+}
+.shell-dsi .dsi-bottom{
+  background:linear-gradient(180deg,#e0d8c0,#d0c8b0);
+  border-radius:2px 2px 14px 14px;
+  padding:8px 10px 12px;
+  border:1.5px solid #c0b890;border-top:none;
+}
+.shell-dsi .dsi-screen{
+  background:#000;border-radius:3px;overflow:hidden;
+  aspect-ratio:4/3;position:relative;
+}
+.shell-dsi .dsi-top-label{
+  font-size:7px;color:#a09870;text-align:right;
+  letter-spacing:1px;padding-bottom:2px;
+  font-weight:600;
+}
+.shell-dsi .dsi-camera{
+  width:5px;height:5px;border-radius:50%;
+  background:#333;border:1px solid #222;
+  position:absolute;top:4px;left:50%;transform:translateX(-50%);
+}
+.shell-dsi .dsi-controls{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:6px 0 2px;
+}
+.shell-dsi .dsi-dpad{
+  width:38px;height:38px;position:relative;flex-shrink:0;
+}
+.shell-dsi .dsi-dpad-h,.shell-dsi .dsi-dpad-v{
+  position:absolute;background:#c8c0a8;border-radius:2px;border:1px solid #a8a088;
+}
+.shell-dsi .dsi-dpad-h{width:100%;height:33%;top:33%;left:0;}
+.shell-dsi .dsi-dpad-v{height:100%;width:33%;top:0;left:33%;}
+.shell-dsi .dsi-center{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
+}
+.shell-dsi .dsi-shutter{
+  width:34px;height:34px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#e0d8c0,#c0b8a0);
+  border:2px solid #a8a088;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 4px rgba(0,0,0,0.2);
+  transition:transform .1s;
+}
+.shell-dsi .dsi-shutter:active{transform:scale(0.92);}
+.shell-dsi .dsi-small-btns{display:flex;gap:8px;}
+.shell-dsi .dsi-small-btn{
+  width:18px;height:7px;border-radius:3px;
+  background:#c0b890;border:0.5px solid #a8a070;cursor:pointer;
+  font-size:5px;color:#808060;display:flex;align-items:center;justify-content:center;
+}
+.shell-dsi .dsi-abxy{
+  display:grid;grid-template-columns:1fr 1fr;gap:3px;flex-shrink:0;
+}
+.shell-dsi .dsi-btn{
+  width:14px;height:14px;border-radius:50%;
+  font-size:7px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  color:rgba(0,0,0,0.4);cursor:pointer;
+  box-shadow:0 1px 2px rgba(0,0,0,0.2);
+}
+.shell-dsi .dsi-shoulder{
+  display:flex;justify-content:space-between;margin:0 -12px;padding:0 2px;
+}
+.shell-dsi .dsi-shoulder-btn{
+  width:38px;height:7px;
+  background:linear-gradient(180deg,#d8d0b8,#c8c0a8);
+  border-radius:4px 4px 0 0;border:1px solid #c0b890;border-bottom:none;
+}
+
+/* ---- shared screen elements ---- */
+.screen-inner{
+  position:absolute;inset:0;width:100%;height:100%;
+}
+video.cam-video{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;display:none;
+}
+canvas.filter-cv{
+  position:absolute;inset:0;width:100%;height:100%;display:none;
+}
+canvas.overlay-cv{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;display:none;
+}
+.hud-bar{
+  position:absolute;top:5px;left:7px;right:7px;
+  display:flex;justify-content:space-between;
+  z-index:5;pointer-events:none;
+}
+.hud-txt{
+  font-family:'Courier New',monospace;font-size:9px;font-weight:600;
+  color:#fff;opacity:0.85;text-shadow:0 1px 2px rgba(0,0,0,0.9);
+  letter-spacing:0.7px;
+}
+.flash-el{
+  position:absolute;inset:0;background:#fff;opacity:0;
+  pointer-events:none;z-index:20;transition:opacity .05s;
+}
+.no-cam-overlay{
+  position:absolute;inset:0;background:#0a0a0a;
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:8px;
+}
+.no-cam-overlay p{font-size:10px;color:#666;text-align:center;padding:0 12px;}
+.no-cam-btn{
+  background:#333;color:#ccc;border:none;border-radius:12px;
+  padding:7px 16px;font-size:11px;cursor:pointer;
+}
+
+/* ---- bottom controls ---- */
+.bottom-bar{
+  width:100%;max-width:400px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.sliders-wrap{
+  background:#1a1a1a;border:0.5px solid rgba(255,255,255,0.08);
+  border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:7px;
+}
+.sl-row{display:flex;align-items:center;gap:10px;}
+.sl-label{font-size:10px;color:#666;width:52px;flex-shrink:0;}
+.sl-row input[type=range]{
+  flex:1;-webkit-appearance:none;appearance:none;
+  height:3px;background:rgba(255,255,255,0.12);border-radius:2px;outline:none;cursor:pointer;
+}
+.sl-row input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:#7f6fe0;cursor:pointer;
+}
+.sl-val{font-size:10px;font-family:'Courier New',monospace;color:#555;width:26px;text-align:right;}
+
+.action-row{display:flex;gap:8px;justify-content:center;}
+.act-btn{
+  background:#1a1a1a;border:0.5px solid rgba(255,255,255,0.12);
+  border-radius:8px;padding:8px 16px;font-size:11px;color:#888;cursor:pointer;
+  transition:background .12s;
+}
+.act-btn:hover{background:#222;}
+
+/* ---- gallery ---- */
+.gallery-wrap{width:100%;max-width:400px;}
+.gallery-label{font-size:10px;color:#444;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;}
+.gallery-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;}
+.gallery-grid img{aspect-ratio:4/3;object-fit:cover;border-radius:3px;border:0.5px solid rgba(255,255,255,0.06);cursor:pointer;}
+.gallery-empty{font-size:11px;color:#333;grid-column:1/-1;text-align:center;padding:12px 0;}
+</style>
+</head>
+<body>
+
+<div class="dev-selector">
+  <button class="dev-btn active" data-device="3ds">3DS</button>
+  <button class="dev-btn" data-device="vita">PS Vita</button>
+  <button class="dev-btn" data-device="dsi">DSi</button>
+</div>
+
+<!-- 3DS Shell -->
+<div class="shell-wrap" id="shell-3ds">
+  <div class="shell-3ds">
+    <div class="shoulder-btns">
+      <div class="shoulder-btn"></div>
+      <div class="shoulder-btn"></div>
+    </div>
+    <div class="top-half">
+      <div class="camera-dot"></div>
+      <div class="top-screen-label">NINTENDO 3DS</div>
+      <div class="screen-bezel" id="screen-3ds">
+        <video class="cam-video" id="video-3ds" autoplay playsinline muted></video>
+        <canvas class="filter-cv" id="fcv-3ds"></canvas>
+        <canvas class="overlay-cv" id="ocv-3ds"></canvas>
+        <div class="hud-bar">
+          <span class="hud-txt">3DS CAM</span>
+          <span class="hud-txt" id="time-3ds">00:00</span>
+        </div>
+        <div class="flash-el" id="flash-3ds"></div>
+        <div class="no-cam-overlay" id="nocam-3ds">
+          <p>タップして起動</p>
+          <button class="no-cam-btn" onclick="startCam('3ds')">カメラ起動</button>
+        </div>
+      </div>
+      <div class="speakers">
+        <div class="speaker-dots"><div class="speaker-dot"></div><div class="speaker-dot"></div><div class="speaker-dot"></div><div class="speaker-dot"></div></div>
+        <div class="speaker-dots"><div class="speaker-dot"></div><div class="speaker-dot"></div><div class="speaker-dot"></div><div class="speaker-dot"></div></div>
+      </div>
+    </div>
+    <div class="hinge"></div>
+    <div class="bottom-half">
+      <div class="d-pad-area">
+        <div class="circle-pad"></div>
+        <div class="center-btns">
+          <div class="small-btn">SEL</div>
+          <div class="shutter-3ds" onclick="capture('3ds')">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="#888"/><circle cx="12" cy="12" r="5" fill="#555"/></svg>
+          </div>
+          <div class="small-btn">STA</div>
+        </div>
+        <div class="abxy">
+          <div class="btn-abxy" style="background:#4488cc;">X</div>
+          <div class="btn-abxy" style="background:#cc4444;">A</div>
+          <div class="btn-abxy" style="background:#44aa44;">B</div>
+          <div class="btn-abxy" style="background:#cc8844;">Y</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Vita Shell -->
+<div class="shell-wrap" id="shell-vita" style="display:none">
+  <div class="shell-vita">
+    <div class="vita-camera"></div>
+    <div class="vita-led"></div>
+    <div class="vita-shoulder">
+      <div class="vita-shoulder-btn"></div>
+      <div class="vita-shoulder-btn"></div>
+    </div>
+    <div class="vita-top">
+      <div class="vita-stick"></div>
+      <div class="vita-screen-wrap" id="screen-vita">
+        <video class="cam-video" id="video-vita" autoplay playsinline muted></video>
+        <canvas class="filter-cv" id="fcv-vita"></canvas>
+        <canvas class="overlay-cv" id="ocv-vita"></canvas>
+        <div class="hud-bar">
+          <span class="hud-txt">VITA CAM</span>
+          <span class="hud-txt" id="time-vita">00:00</span>
+        </div>
+        <div class="flash-el" id="flash-vita"></div>
+        <div class="no-cam-overlay" id="nocam-vita">
+          <p>タップして起動</p>
+          <button class="no-cam-btn" onclick="startCam('vita')">カメラ起動</button>
+        </div>
+      </div>
+      <div class="vita-abxy">
+        <div class="vita-btn" style="background:#4488cc;">□</div>
+        <div class="vita-btn" style="background:#cc4444;">△</div>
+        <div class="vita-btn" style="background:#44aa44;">×</div>
+        <div class="vita-btn" style="background:#cc8844;">○</div>
+      </div>
+    </div>
+    <div class="vita-bottom">
+      <div class="vita-dpad">
+        <div class="vita-dpad-h"></div>
+        <div class="vita-dpad-v"></div>
+      </div>
+      <div class="vita-center">
+        <div class="vita-shutter" onclick="capture('vita')">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="#555"/><circle cx="12" cy="12" r="4" fill="#333"/></svg>
+        </div>
+        <div class="vita-small-btns">
+          <div class="vita-small-btn"></div>
+          <div class="vita-small-btn"></div>
+        </div>
+      </div>
+      <div class="vita-right-stick"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DSi Shell -->
+<div class="shell-wrap" id="shell-dsi" style="display:none">
+  <div class="shell-dsi">
+    <div class="dsi-shoulder">
+      <div class="dsi-shoulder-btn"></div>
+      <div class="dsi-shoulder-btn"></div>
+    </div>
+    <div class="dsi-top">
+      <div class="dsi-camera"></div>
+      <div class="dsi-top-label">Nintendo DSi</div>
+      <div class="dsi-screen" id="screen-dsi">
+        <video class="cam-video" id="video-dsi" autoplay playsinline muted></video>
+        <canvas class="filter-cv" id="fcv-dsi"></canvas>
+        <canvas class="overlay-cv" id="ocv-dsi"></canvas>
+        <div class="hud-bar">
+          <span class="hud-txt">DSi CAM</span>
+          <span class="hud-txt" id="time-dsi">00:00</span>
+        </div>
+        <div class="flash-el" id="flash-dsi"></div>
+        <div class="no-cam-overlay" id="nocam-dsi">
+          <p>タップして起動</p>
+          <button class="no-cam-btn" onclick="startCam('dsi')">カメラ起動</button>
+        </div>
+      </div>
+    </div>
+    <div class="dsi-hinge"></div>
+    <div class="dsi-bottom">
+      <div class="dsi-controls">
+        <div class="dsi-dpad">
+          <div class="dsi-dpad-h"></div>
+          <div class="dsi-dpad-v"></div>
+        </div>
+        <div class="dsi-center">
+          <div class="dsi-shutter" onclick="capture('dsi')">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="#a8a088"/><circle cx="12" cy="12" r="4" fill="#888870"/></svg>
+          </div>
+          <div class="dsi-small-btns">
+            <div class="dsi-small-btn">SEL</div>
+            <div class="dsi-small-btn">STA</div>
+          </div>
+        </div>
+        <div class="dsi-abxy">
+          <div class="dsi-btn" style="background:#4488cc;">X</div>
+          <div class="dsi-btn" style="background:#cc4444;">A</div>
+          <div class="dsi-btn" style="background:#44aa44;">B</div>
+          <div class="dsi-btn" style="background:#cc8844;">Y</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- sliders + actions -->
+<div class="bottom-bar">
+  <div class="sliders-wrap">
+    <div class="sl-row">
+      <span class="sl-label">ノイズ</span>
+      <input type="range" id="sl-noise" min="0" max="100" value="38" step="1">
+      <span class="sl-val" id="sv-noise">38</span>
+    </div>
+    <div class="sl-row">
+      <span class="sl-label">解像度</span>
+      <input type="range" id="sl-res" min="1" max="10" value="4" step="1">
+      <span class="sl-val" id="sv-res">4</span>
+    </div>
+    <div class="sl-row">
+      <span class="sl-label">彩度</span>
+      <input type="range" id="sl-sat" min="0" max="200" value="120" step="1">
+      <span class="sl-val" id="sv-sat">120</span>
+    </div>
+    <div class="sl-row">
+      <span class="sl-label">コントラスト</span>
+      <input type="range" id="sl-con" min="50" max="200" value="115" step="1">
+      <span class="sl-val" id="sv-con">115</span>
+    </div>
+  </div>
+  <div class="action-row">
+    <button class="act-btn" onclick="flipCam()">カメラ切替</button>
+    <button class="act-btn" onclick="dlLast()">保存</button>
+  </div>
+</div>
+
+<div class="gallery-wrap">
+  <div class="gallery-label">撮った写真</div>
+  <div class="gallery-grid" id="gallery">
+    <div class="gallery-empty">まだ写真がありません</div>
+  </div>
+</div>
+
+<script>
+const DEVICES = {
+  '3ds': {
+    tint:[-8,-4,22], colorNoise:true, highlight:0.05, vignette:0.55, lcd:true,
+    noise:38, res:4, sat:120, con:115,
+    softFocus: 6,
+    caAmount: 2.5,      // 色収差のずれ幅（ピクセル）
+    hlThreshold: 195,   // ハイライト飽和の閾値
+    hlStrength: 1.5,    // 飽和の強さ
+  },
+  'vita': {
+    // 実機分析: 彩度高め・コントラスト強・ウォームバイアス・白くハイライトが飛ぶ
+    tint:[12, 4, -8],   // ウォーム寄り（赤み・黄み）、青を少し引く
+    colorNoise:false, highlight:0.08, vignette:0.22, lcd:false,
+    noise:24, res:5, sat:138, con:128,
+    softFocus: 4,
+    caAmount: 1.2,
+    hlThreshold: 188,
+    hlStrength: 2.2,    // ハイライトが白く一気に飛ぶ
+  },
+  'dsi': {
+    tint:[16,8,-6], colorNoise:true, highlight:0.18, vignette:0.60, lcd:true,
+    noise:55, res:2, sat:90, con:100,
+    softFocus: 10,
+    caAmount: 3.5,      // DSiは色収差が一番強い
+    hlThreshold: 175,
+    hlStrength: 2.0,
+  }
+};
+
+let current = '3ds';
+let facing = 'environment';
+let streams = {};
+let rafs = {};
+let lastPhoto = null;
+
+function getParams() {
+  return {
+    noise: +document.getElementById('sl-noise').value,
+    res:   +document.getElementById('sl-res').value,
+    sat:   +document.getElementById('sl-sat').value / 100,
+    con:   +document.getElementById('sl-con').value / 100,
+  };
+}
+
+['noise','res','sat','con'].forEach(id => {
+  const sl = document.getElementById('sl-' + id);
+  const sv = document.getElementById('sv-' + id);
+  sl.addEventListener('input', () => { sv.textContent = sl.value; });
+});
+
+function updateTime(dev) {
+  const now = new Date();
+  const t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  const el = document.getElementById('time-' + dev);
+  if (el) el.textContent = t;
+}
+setInterval(() => updateTime(current), 15000);
+
+async function startCam(dev) {
+  try {
+    if (streams[dev]) streams[dev].getTracks().forEach(t => t.stop());
+    const s = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width:{ideal:1280}, height:{ideal:960} },
+      audio: false
+    });
+    streams[dev] = s;
+    const video = document.getElementById('video-' + dev);
+    video.srcObject = s;
+    await video.play();
+    const nocam = document.getElementById('nocam-' + dev);
+    nocam.style.display = 'none';
+    video.style.display = 'block';
+    document.getElementById('fcv-' + dev).style.display = 'block';
+    document.getElementById('ocv-' + dev).style.display = 'block';
+    updateTime(dev);
+    startLoop(dev);
+  } catch(e) {
+    alert('カメラへのアクセスが拒否されました');
+  }
+}
+
+function startLoop(dev) {
+  if (rafs[dev]) cancelAnimationFrame(rafs[dev]);
+  function loop() {
+    rafs[dev] = requestAnimationFrame(loop);
+    processFrame(dev);
+  }
+  loop();
+}
+
+const JPEG_QUALITY = { '3ds': 0.18, 'vita': 0.22, 'dsi': 0.12 };
+
+// トーンカーブ: 入力(0-255)→出力(0-255)の変換テーブルを生成
+// points: [[in,out], ...] の制御点（線形補間）
+function buildToneCurve(points) {
+  const table = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    let lo = points[0], hi = points[points.length-1];
+    for (let j = 0; j < points.length-1; j++) {
+      if (i >= points[j][0] && i <= points[j+1][0]) { lo = points[j]; hi = points[j+1]; break; }
+    }
+    const t = lo[0] === hi[0] ? 0 : (i - lo[0]) / (hi[0] - lo[0]);
+    table[i] = Math.max(0, Math.min(255, Math.round(lo[1] + t * (hi[1] - lo[1]))));
+  }
+  return table;
+}
+
+// 各デバイスのトーンカーブ（シャドウ持ち上げ・ハイライト圧縮）
+// 3DS: シャドウ持ち上がり気味、ハイライトは早めに色飽和
+// Vita: フラットで狭いダイナミックレンジ、全体的に明るめ
+// DSi: 強いシャドウ潰れ、ハイライトが一気に飛ぶ
+const TONE_CURVES = {
+  '3ds': {
+    r: buildToneCurve([[0,18],[60,70],[128,132],[200,215],[255,245]]),
+    g: buildToneCurve([[0,14],[60,65],[128,128],[200,210],[255,240]]),
+    b: buildToneCurve([[0,22],[60,78],[128,140],[200,225],[255,252]]),
+  },
+  'vita': {
+    // 実機: シャドウが締まる・ハイライトが白く飛ぶ・コントラスト強
+    r: buildToneCurve([[0,4],[40,22],[100,105],[160,172],[210,230],[255,255]]),
+    g: buildToneCurve([[0,2],[40,18],[100,100],[160,168],[210,226],[255,255]]),
+    b: buildToneCurve([[0,0],[40,12],[100,92],[160,155],[210,210],[255,248]]),
+  },
+  'dsi': {
+    r: buildToneCurve([[0,8],[40,30],[128,130],[180,200],[220,240],[255,255]]),
+    g: buildToneCurve([[0,6],[40,25],[128,125],[180,192],[220,230],[255,248]]),
+    b: buildToneCurve([[0,4],[40,18],[128,118],[180,180],[220,215],[255,240]]),
+  },
+};
+
+// 色収差: RとBチャンネルをずらしてにじみを出す
+function applyChromaticAberration(ctx, w, h, amount) {
+  if (amount <= 0) return;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const src = new Uint8ClampedArray(imgData.data);
+  const dst = imgData.data;
+  const shift = Math.round(amount);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      // R: 右にshift
+      const rx = Math.min(w-1, x + shift);
+      const ri = (y * w + rx) * 4;
+      // B: 左にshift
+      const bx = Math.max(0, x - shift);
+      const bi = (y * w + bx) * 4;
+
+      dst[i]   = src[ri];     // R from shifted right
+      dst[i+1] = src[i+1];    // G unchanged
+      dst[i+2] = src[bi+2];   // B from shifted left
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// ハイライト色飽和: 明るいピクセルほど色がそのチャンネルの方向に飛ぶ
+function applyHighlightClip(px, d) {
+  const threshold = d.hlThreshold || 200;
+  const strength  = d.hlStrength  || 1.4;
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i], g = px[i+1], b = px[i+2];
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    if (lum > threshold) {
+      const t = Math.min(1, (lum - threshold) / (255 - threshold));
+      px[i]   = Math.min(255, r * (1 + t * (strength - 1)));
+      px[i+1] = Math.min(255, g * (1 + t * (strength - 1) * 0.7));
+      px[i+2] = Math.min(255, b * (1 + t * (strength - 1) * 0.5));
+    }
+  }
+}
+
+function applyPixelProcess(offCtx, dw, dh, d, na, dev) {
+  const img = offCtx.getImageData(0, 0, dw, dh);
+  const px = img.data;
+  const tc = TONE_CURVES[dev];
+
+  for (let i = 0; i < px.length; i += 4) {
+    // 1. トーンカーブ適用（デバイス固有の階調特性）
+    let r = tc.r[px[i]];
+    let g = tc.g[px[i+1]];
+    let b = tc.b[px[i+2]];
+
+    // 2. ティント
+    r += d.tint[0]; g += d.tint[1]; b += d.tint[2];
+
+    // 3. ノイズ
+    if (na > 0) {
+      if (d.colorNoise) {
+        r += (Math.random()-.5)*na*2.2;
+        g += (Math.random()-.5)*na*1.8;
+        b += (Math.random()-.5)*na*2.5;
+      } else {
+        const n = (Math.random()-.5)*na*1.6;
+        r+=n; g+=n; b+=n;
+      }
+    }
+
+    px[i]   = Math.max(0,Math.min(255,r));
+    px[i+1] = Math.max(0,Math.min(255,g));
+    px[i+2] = Math.max(0,Math.min(255,b));
+  }
+
+  // 4. ハイライト色飽和
+  applyHighlightClip(px, d);
+
+  offCtx.putImageData(img, 0, 0);
+}
+
+// JPEG二重圧縮でブロックノイズを発生させる
+function jpegDegrade(canvas, quality) {
+  const url = canvas.toDataURL('image/jpeg', quality);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.src = url;
+  });
+}
+
+// ソフトフォーカス: 縮小→拡大のボックスブラー近似
+function softFocus(ctx, w, h, amount) {
+  if (amount <= 0) return;
+  // 縮小して拡大することでぼかしを擬似的に再現
+  const small = document.createElement('canvas');
+  const sf = Math.max(0.3, 1 - amount * 0.015);
+  small.width = Math.max(8, Math.floor(w * sf));
+  small.height = Math.max(6, Math.floor(h * sf));
+  const sCtx = small.getContext('2d');
+  sCtx.imageSmoothingEnabled = true;
+  sCtx.imageSmoothingQuality = 'low';
+  // 現在のcanvasを縮小
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  tmp.getContext('2d').drawImage(ctx.canvas, 0, 0);
+  sCtx.drawImage(tmp, 0, 0, small.width, small.height);
+  // 元サイズに戻す（ぼけが出る）
+  ctx.clearRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'low';
+  ctx.drawImage(small, 0, 0, w, h);
+  ctx.imageSmoothingEnabled = false;
+}
+
+function processFrame(dev) {
+  const video = document.getElementById('video-' + dev);
+  if (!video || video.readyState < 2) return;
+
+  const fcv = document.getElementById('fcv-' + dev);
+  const ocv = document.getElementById('ocv-' + dev);
+  const fCtx = fcv.getContext('2d');
+  const oCtx = ocv.getContext('2d');
+  const d = DEVICES[dev];
+  const p = getParams();
+
+  const vw = video.videoWidth || 640;
+  const vh = video.videoHeight || 480;
+  const SCALES = [1,.85,.70,.55,.45,.38,.32,.27,.22,.18];
+  const scale = SCALES[Math.min(p.res-1,9)];
+  const dw = Math.max(16, Math.floor(vw * scale));
+  const dh = Math.max(12, Math.floor(vh * scale));
+
+  fcv.width = vw; fcv.height = vh;
+
+  const off = new OffscreenCanvas(dw, dh);
+  const offCtx = off.getContext('2d');
+  offCtx.filter = `saturate(${p.sat}) contrast(${p.con}) brightness(${1 + d.highlight})`;
+  offCtx.drawImage(video, 0, 0, dw, dh);
+
+  applyPixelProcess(offCtx, dw, dh, d, p.noise, dev);
+
+  fCtx.imageSmoothingEnabled = false;
+  fCtx.drawImage(off, 0, 0, vw, vh);
+
+  // 色収差（RGBチャンネルずれ）
+  applyChromaticAberration(fCtx, vw, vh, d.caAmount || 0);
+
+  // プレビュー時にも軽いソフトフォーカスをかける（リアルタイム）
+  softFocus(fCtx, vw, vh, d.softFocus || 0);
+
+  ocv.width = vw; ocv.height = vh;
+  oCtx.clearRect(0,0,vw,vh);
+  if (d.vignette > 0) {
+    const g = oCtx.createRadialGradient(vw/2,vh/2,vh*.12,vw/2,vh/2,vh*.75);
+    g.addColorStop(0,'rgba(0,0,0,0)');
+    g.addColorStop(1,`rgba(0,0,0,${d.vignette})`);
+    oCtx.fillStyle = g;
+    oCtx.fillRect(0,0,vw,vh);
+  }
+  if (d.lcd) {
+    oCtx.fillStyle = 'rgba(0,0,0,0.045)';
+    const lh = Math.max(1, Math.floor(vh/90));
+    for (let y=0; y<vh; y+=lh*2) oCtx.fillRect(0,y,vw,lh);
+  }
+}
+
+async function capture(dev) {
+  const fcv = document.getElementById('fcv-' + dev);
+  const ocv = document.getElementById('ocv-' + dev);
+  if (!fcv.width) return;
+
+  const fl = document.getElementById('flash-' + dev);
+  fl.style.opacity = '0.75';
+  setTimeout(() => { fl.style.opacity = '0'; }, 100);
+
+  // Step1: 現在のフィルター済みフレームを取得
+  const snap = document.createElement('canvas');
+  snap.width = fcv.width; snap.height = fcv.height;
+  const sCtx = snap.getContext('2d');
+  sCtx.drawImage(fcv, 0, 0);
+  sCtx.drawImage(ocv, 0, 0);
+
+  const d = DEVICES[dev];
+
+  // Step2: 色収差（撮影時はプレビューより少し強くかける）
+  applyChromaticAberration(sCtx, snap.width, snap.height, (d.caAmount || 0) * 1.4);
+
+  // Step3: ソフトフォーカス
+  softFocus(sCtx, snap.width, snap.height, d.softFocus || 8);
+
+  // Step4: JPEG二重圧縮
+  const degraded = await jpegDegrade(snap, JPEG_QUALITY[dev]);
+  sCtx.drawImage(degraded, 0, 0);
+
+  // Step5: 二回目のJPEG
+  const degraded2 = await jpegDegrade(snap, JPEG_QUALITY[dev] + 0.1);
+  sCtx.drawImage(degraded2, 0, 0);
+
+  // Step6: 最終出力
+  const url = snap.toDataURL('image/jpeg', 0.75);
+  lastPhoto = url;
+  addGallery(url, dev);
+}
+
+function addGallery(url, dev) {
+  const g = document.getElementById('gallery');
+  const empty = g.querySelector('.gallery-empty');
+  if (empty) empty.remove();
+  const img = document.createElement('img');
+  img.src = url;
+  img.title = 'タップでダウンロード';
+  img.addEventListener('click', () => dlURL(url, dev));
+  g.prepend(img);
+}
+
+function dlURL(url, dev) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'retrocam_' + dev + '_' + Date.now() + '.jpg';
+  a.click();
+}
+
+function dlLast() {
+  if (lastPhoto) dlURL(lastPhoto, current);
+}
+
+async function flipCam() {
+  facing = facing === 'environment' ? 'user' : 'environment';
+  if (streams[current]) await startCam(current);
+}
+
+document.querySelectorAll('.dev-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.dev-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const dev = btn.dataset.device;
+    current = dev;
+
+    ['3ds','vita','dsi'].forEach(d => {
+      document.getElementById('shell-' + d).style.display = d === dev ? 'flex' : 'none';
+    });
+
+    const D = DEVICES[dev];
+    document.getElementById('sl-noise').value = D.noise; document.getElementById('sv-noise').textContent = D.noise;
+    document.getElementById('sl-res').value = D.res;     document.getElementById('sv-res').textContent = D.res;
+    document.getElementById('sl-sat').value = D.sat;     document.getElementById('sv-sat').textContent = D.sat;
+    document.getElementById('sl-con').value = D.con;     document.getElementById('sv-con').textContent = D.con;
+  });
+});
+</script>
+</body>
+</html>
