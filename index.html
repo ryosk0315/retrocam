@@ -223,6 +223,32 @@ html,body{height:100%;width:100%;background:var(--bg);color:var(--text);
   border-radius:20px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:99;
   white-space:nowrap;backdrop-filter:blur(8px);}
 #toast.show{opacity:1;}
+
+/* ===== SX600 mode (このモード専用。既存モードには効かない) ===== */
+#main-fcv.sx600{object-fit:contain;background:#000;}
+#cam-bg.sx600{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
+#sx-orig{position:absolute;top:140px;left:50%;transform:translateX(-50%);z-index:6;
+  font-family:'Courier New',monospace;font-size:11px;font-weight:600;letter-spacing:2px;
+  color:#000;background:#e8d9b0;padding:3px 10px;border-radius:4px;display:none;pointer-events:none;}
+@media (orientation:landscape){#sx-orig{top:40px;}}
+#sx-panel{position:absolute;left:0;right:0;bottom:0;z-index:20;
+  background:rgba(16,16,18,0.92);backdrop-filter:blur(12px);
+  border-radius:16px 16px 0 0;padding:16px 20px calc(20px + env(safe-area-inset-bottom));
+  max-height:55%;overflow-y:auto;transform:translateY(105%);transition:transform .25s;}
+#sx-panel.open{transform:none;}
+#sx-panel h3{font-size:13px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:1px;margin-bottom:4px;}
+.sx-row{display:grid;grid-template-columns:96px 1fr 40px;align-items:center;gap:10px;margin:10px 0;font-size:12px;}
+.sx-row span:first-child{color:rgba(255,255,255,0.7);}
+.sx-row span:last-child{font-family:'Courier New',monospace;color:rgba(255,255,255,0.5);text-align:right;}
+.sx-row input[type=range]{width:100%;-webkit-appearance:none;appearance:none;
+  height:3px;background:rgba(255,255,255,0.15);border-radius:2px;}
+.sx-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;
+  border-radius:50%;background:#e8d9b0;}
+.sx-btns{display:flex;gap:8px;margin-top:14px;}
+.sx-btns button{flex:1;font-size:13px;color:#fff;background:rgba(255,255,255,0.1);
+  border:0.5px solid rgba(255,255,255,0.15);border-radius:10px;padding:10px 0;cursor:pointer;}
+.gshell-sx600{width:300px;}
+.gshell-sx600 img,.gshell-sx600 video{width:100%;height:auto;display:block;border-radius:3px;}
 </style>
 </head>
 <body>
@@ -237,6 +263,7 @@ html,body{height:100%;width:100%;background:var(--bg);color:var(--text);
       <div id="rec-dot"></div>
       <span id="rec-time">00:00</span>
     </div>
+    <div id="sx-orig">ORIGINAL</div>
   </div>
 
   <div id="no-cam">
@@ -249,6 +276,7 @@ html,body{height:100%;width:100%;background:var(--bg);color:var(--text);
       <button class="dev-tab active" data-device="3ds">3DS</button>
       <button class="dev-tab" data-device="vita">PS Vita</button>
       <button class="dev-tab" data-device="dsi">DSi</button>
+      <button class="dev-tab" data-device="sx600">SX600</button>
     </div>
     <div id="settings-btn">⚙</div>
   </div>
@@ -278,6 +306,16 @@ html,body{height:100%;width:100%;background:var(--bg);color:var(--text);
       <span class="sl-label">コントラスト</span>
       <input type="range" id="sl-con" min="50" max="200" value="115" step="1">
       <span class="sl-val" id="sv-con">115</span>
+    </div>
+  </div>
+
+  <div id="sx-panel">
+    <h3>SX600 調整</h3>
+    <div id="sx-sliders"></div>
+    <div class="sx-btns">
+      <button id="sx-reset">リセット</button>
+      <button id="sx-copy">数値コピー</button>
+      <button id="sx-close">閉じる</button>
     </div>
   </div>
 
@@ -319,6 +357,223 @@ html,body{height:100%;width:100%;background:var(--bg);color:var(--text);
 </div>
 
 <div id="toast"></div>
+
+<script>
+// ===================== SX600 MODE =====================
+// Canon PowerShot SX600 HS (2014) の写り。既存モード（Canvas2D処理）とは完全に独立した WebGL モジュール。
+// 共通部分からは frame() / setActive() / togglePanel() / label だけを使う。
+// カメラ・撮影・保存・ギャラリーは既存処理をそのまま使い、結果は main-fcv に描き込む。
+const SX600=(()=>{
+  const label='SX600 HS';
+  const STORE='sx600p';
+  const $=id=>document.getElementById(id);
+
+  // ---- パラメータ（このモードの「味」はここと MAIN シェーダーだけ） ----
+  const DEF=[
+    ['dehdr','HDR打ち消し',0.8,0,1.2],
+    ['high','雲・白の抜け',0.6,0,1],
+    ['shadow','暗部の沈み',0.35,0,1],
+    ['sky','空のシアン',0.7,0,1],
+    ['green','緑のライム',0.6,0,1],
+    ['soft','描写の甘さ',0.35,0,1],
+    ['warm','暖色残り',0.15,-0.5,1],
+    ['grain','ノイズ',0.3,0,1]
+  ];
+  const P={};DEF.forEach(d=>P[d[0]]=d[2]);
+  try{const s=JSON.parse(localStorage.getItem(STORE)||'null');if(s)for(const k in s)if(k in P&&typeof s[k]==='number')P[k]=s[k];}catch(e){}
+  function saveP(){try{localStorage.setItem(STORE,JSON.stringify(P));}catch(e){}}
+
+  const VS=`attribute vec2 p;varying vec2 uv;void main(){uv=p*0.5+0.5;gl_Position=vec4(p,0.,1.);}`;
+
+  // 縮小パス：大きなスケールの明るさ（＝iPhoneのHDRが潰した明暗差）を取り出す
+  const DOWN=`precision mediump float;varying vec2 uv;uniform sampler2D t;uniform vec2 crop,texel;
+void main(){vec2 c=(uv-0.5)*crop+0.5;vec3 s=vec3(0.);
+for(int i=0;i<4;i++)for(int j=0;j<4;j++){s+=texture2D(t,c+(vec2(float(i),float(j))-1.5)*0.25*texel).rgb;}
+gl_FragColor=vec4(s/16.,1.);}`;
+
+  const MAIN=`precision highp float;
+varying vec2 uv;
+uniform sampler2D uSrc,uBase;
+uniform vec2 uCrop,uPx,uBaseTexel;
+uniform float u_dehdr,u_high,u_shadow,u_sky,u_green,u_soft,u_warm,u_grain,uSeed,uBypass;
+vec3 S(vec2 p){return texture2D(uSrc,(p-0.5)*uCrop+0.5).rgb;}
+vec3 B(vec2 p){return texture2D(uBase,p).rgb;}
+float luma(vec3 c){return dot(c,vec3(0.2126,0.7152,0.0722));}
+vec3 rgb2hsv(vec3 c){vec4 K=vec4(0.,-1./3.,2./3.,-1.);vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));
+vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));float d=q.x-min(q.w,q.y);float e=1.0e-10;
+return vec3(abs(q.z+(q.w-q.y)/(6.0*d+e)),d/(q.x+e),q.x);}
+vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.,2./3.,1./3.,3.);vec3 p=abs(fract(c.xxx+K.xyz)*6.-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.,1.),c.y);}
+float hueW(float h,float c,float w){float d=abs(fract(h-c+0.5)-0.5);return 1.0-smoothstep(w*0.4,w,d);}
+void main(){
+  vec3 c=S(uv);
+  if(uBypass>0.5){gl_FragColor=vec4(c,1.);return;}
+  // 1. 描写の甘さ：iPhoneのシャープネスを丸める
+  vec2 d=uPx*1.3;
+  vec3 bl=(S(uv+vec2(d.x,0.))+S(uv-vec2(d.x,0.))+S(uv+vec2(0.,d.y))+S(uv-vec2(0.,d.y)))*0.25;
+  c=mix(c,bl,u_soft*0.8);
+  // 2. HDR打ち消し：大きな明暗差を戻す（暗い場所は暗く、明るい場所は明るく）
+  vec2 t=uBaseTexel;
+  vec3 bs=B(uv)*4.0+(B(uv+vec2(t.x,0.))+B(uv-vec2(t.x,0.))+B(uv+vec2(0.,t.y))+B(uv-vec2(0.,t.y)))*2.0
+         +B(uv+t)+B(uv-t)+B(uv+vec2(t.x,-t.y))+B(uv+vec2(-t.x,t.y));
+  float b=max(luma(bs/16.0),0.002);
+  float b2=mix(b,smoothstep(0.0,1.0,b),u_dehdr);
+  c*=clamp(b2/b,0.35,1.8);
+  // 3. 暗部は沈める、白は素直に白へ抜く（雲がグレーにならない）
+  float L=luma(c);
+  c*=1.0-u_shadow*0.6*(1.0-smoothstep(0.04,0.5,L));
+  float hi=smoothstep(0.42,0.92,L);
+  c=mix(c,vec3(1.0),u_high*0.85*hi);
+  c=clamp(c,0.,1.);
+  // 4. 色：空は明るいシアンへ、緑は黄緑へ
+  vec3 h=rgb2hsv(c);
+  float sm=smoothstep(0.06,0.22,h.y);
+  float ws=hueW(h.x,0.60,0.09)*sm*smoothstep(0.38,0.62,h.z);
+  h.x-=u_sky*0.022*ws; h.z+=u_sky*0.5*ws*(1.0-h.z); h.y*=1.0-u_sky*0.28*ws;
+  float wg=hueW(h.x,0.30,0.13)*sm;
+  h.x-=u_green*0.06*wg; h.z+=u_green*0.16*wg*h.z; h.y=min(1.0,h.y*(1.0+u_green*0.15*wg));
+  h.x=fract(h.x);
+  c=hsv2rgb(h);
+  // 5. 電球色を補正しきらない暖色
+  c*=vec3(1.0+0.08*u_warm,1.0+0.015*u_warm,1.0-0.11*u_warm);
+  // 6. 小センサーっぽいノイズ（中間調に多め）
+  float n=fract(sin(dot(gl_FragCoord.xy+uSeed,vec2(12.9898,78.233)))*43758.5453)-0.5;
+  float m=4.0*L*(1.0-L);
+  c+=n*u_grain*0.07*(0.4+0.6*m);
+  gl_FragColor=vec4(clamp(c,0.,1.),1.);
+}`;
+
+  // ---- WebGL（このモード専用のオフスクリーンcanvas。初回使用時に作る） ----
+  let glc=null,gl=null,pDown=null,pMain=null,srcTex=null,glError=null;
+  function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}
+  function mkProg(fs){const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,VS));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));
+    gl.bindAttribLocation(p,0,'p');gl.linkProgram(p);
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));p.u={};return p;}
+  function U(p,n){return (n in p.u)?p.u[n]:(p.u[n]=gl.getUniformLocation(p,n));}
+  function mkTex(){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t;}
+  function mkFbo(w,h){const t=mkTex();gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);return {t,f,w,h};}
+  function initGL(){
+    if(gl||glError)return !!gl;
+    try{
+      glc=document.createElement('canvas');
+      gl=glc.getContext('webgl',{preserveDrawingBuffer:true,premultipliedAlpha:false,antialias:false});
+      if(!gl)throw new Error('WebGL非対応');
+      pDown=mkProg(DOWN);pMain=mkProg(MAIN);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true); // uv/uCrop はこの前提で計算している
+      const quad=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,quad);
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+      srcTex=mkTex();
+      return true;
+    }catch(e){
+      glError=e.message||String(e);gl=null;
+      if(typeof showToast==='function')showToast('SX600: '+glError);
+      return false;
+    }
+  }
+
+  let srcW=0,srcH=0,cx=1,cy=1,cropW=0,cropH=0,f1=null,f2=null,pw=0,ph=0,bypass=0;
+
+  // SX600と同じ4:3に切り出す（縦持ちなら3:4）
+  function setSource(w,h){
+    srcW=w;srcH=h;const dA=w>=h?4/3:3/4,sA=w/h;
+    if(sA>dA){cx=dA/sA;cy=1;}else{cx=1;cy=sA/dA;}
+    cropW=Math.round(w*cx);cropH=Math.round(h*cy);
+    const r=cropH/cropW;
+    [f1,f2].forEach(f=>{if(f){gl.deleteTexture(f.t);gl.deleteFramebuffer(f.f);}});
+    f1=mkFbo(256,Math.max(2,Math.round(256*r)));f2=mkFbo(48,Math.max(2,Math.round(48*r)));
+    // 出力解像度：既存アプリに合わせカメラ映像の解像度に従う（上限1600px）
+    const L=Math.min(1600,Math.max(cropW,cropH)),s=L/Math.max(cropW,cropH);
+    pw=Math.round(cropW*s);ph=Math.round(cropH*s);glc.width=pw;glc.height=ph;
+  }
+
+  // 2パス：元画像 → f1(256px幅) → f2(48px幅) → uBase として MAIN へ
+  function render(W,H,src,byp){
+    const z=(typeof zoomLevel==='number'&&zoomLevel>1)?zoomLevel:1; // 既存のピンチズームに追従
+    const kx=cx/z,ky=cy/z;
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,srcTex);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,src);
+    gl.useProgram(pDown);gl.uniform1i(U(pDown,'t'),0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,f1.f);gl.viewport(0,0,f1.w,f1.h);
+    gl.uniform2f(U(pDown,'crop'),kx,ky);gl.uniform2f(U(pDown,'texel'),kx/f1.w,ky/f1.h);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,f2.f);gl.viewport(0,0,f2.w,f2.h);gl.bindTexture(gl.TEXTURE_2D,f1.t);
+    gl.uniform2f(U(pDown,'crop'),1,1);gl.uniform2f(U(pDown,'texel'),1/f2.w,1/f2.h);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,W,H);gl.useProgram(pMain);
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,srcTex);gl.uniform1i(U(pMain,'uSrc'),0);
+    gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,f2.t);gl.uniform1i(U(pMain,'uBase'),1);
+    gl.uniform2f(U(pMain,'uCrop'),kx,ky);gl.uniform2f(U(pMain,'uPx'),z/cropW,z/cropH);
+    gl.uniform2f(U(pMain,'uBaseTexel'),1/f2.w,1/f2.h);
+    DEF.forEach(d=>gl.uniform1f(U(pMain,'u_'+d[0]),P[d[0]]));
+    gl.uniform1f(U(pMain,'uSeed'),Math.random()*1000);gl.uniform1f(U(pMain,'uBypass'),byp);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  // 既存 loop() から毎フレーム呼ばれる。forCapture=true のときは補正前表示を無視して描く
+  function frame(forCapture){
+    const v=$('main-video'),out=$('main-fcv'),ocv=$('main-ocv');
+    if(!v.videoWidth||!initGL())return;
+    if(v.videoWidth!==srcW||v.videoHeight!==srcH)setSource(v.videoWidth,v.videoHeight);
+    render(pw,ph,v,forCapture?0:bypass);
+    if(out.width!==pw||out.height!==ph){out.width=pw;out.height=ph;}
+    out.getContext('2d').drawImage(glc,0,0);
+    if(ocv.width&&ocv.height)ocv.getContext('2d').clearRect(0,0,ocv.width,ocv.height);
+  }
+
+  // ---- 調整パネル ----
+  const panel=$('sx-panel'),inputs={};
+  DEF.forEach(([k,lbl,def,min,max])=>{
+    const r=document.createElement('div');r.className='sx-row';
+    r.innerHTML=`<span>${lbl}</span><input type="range" min="${min}" max="${max}" step="0.01" value="${P[k]}"><span>${(+P[k]).toFixed(2)}</span>`;
+    const i=r.querySelector('input'),v=r.lastElementChild;
+    i.oninput=()=>{P[k]=+i.value;v.textContent=P[k].toFixed(2);saveP();};
+    inputs[k]={i,v};$('sx-sliders').appendChild(r);
+  });
+  $('sx-reset').onclick=()=>{DEF.forEach(d=>{P[d[0]]=d[2];inputs[d[0]].i.value=d[2];inputs[d[0]].v.textContent=d[2].toFixed(2);});saveP();};
+  $('sx-close').onclick=()=>panel.classList.remove('open');
+  $('sx-copy').onclick=()=>{
+    const txt=JSON.stringify(P),b=$('sx-copy');
+    (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject())
+      .then(()=>{b.textContent='コピーした';setTimeout(()=>b.textContent='数値コピー',1200);})
+      .catch(()=>prompt('コピーしてください',txt));
+  };
+  function togglePanel(){panel.classList.toggle('open');}
+
+  // ---- 長押しで補正前と比較（1本指・250ms保持。2本目の指＝ピンチ、または指の移動で解除） ----
+  const camBg=$('cam-bg'),badge=$('sx-orig');
+  let active=false,holdTimer=null,startX=0,startY=0;const pointers=new Set();
+  function bypassOff(){clearTimeout(holdTimer);holdTimer=null;bypass=0;badge.style.display='none';}
+  camBg.addEventListener('pointerdown',e=>{
+    pointers.add(e.pointerId);
+    if(!active||pointers.size!==1){bypassOff();return;}
+    startX=e.clientX;startY=e.clientY;
+    clearTimeout(holdTimer);
+    holdTimer=setTimeout(()=>{if(active&&pointers.size===1){bypass=1;badge.style.display='block';}},250);
+  });
+  camBg.addEventListener('pointermove',e=>{
+    if(holdTimer&&!bypass&&Math.hypot(e.clientX-startX,e.clientY-startY)>10)bypassOff();
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>camBg.addEventListener(ev,e=>{pointers.delete(e.pointerId);bypassOff();}));
+  camBg.addEventListener('contextmenu',e=>{if(active)e.preventDefault();});
+
+  let hinted=false;
+  function setActive(on){
+    active=on;
+    $('main-fcv').classList.toggle('sx600',on);
+    camBg.classList.toggle('sx600',on);
+    if(!on){panel.classList.remove('open');bypassOff();srcW=srcH=0;}
+    else if(!hinted&&typeof showToast==='function'){hinted=true;showToast('プレビュー長押しで補正前と比較');}
+  }
+
+  return {label,frame,setActive,togglePanel,_P:P,_DEF:DEF};
+})();
+</script>
 
 <script>
 // ===================== TONE CURVES =====================
@@ -525,6 +780,7 @@ function loop(){
   if(!running)return;
   raf=requestAnimationFrame(loop);
   if(video.readyState<2)return;
+  if(current==='sx600'){SX600.frame();return;}
   const d=DEV[current],p=getParams();
   const vw=video.videoWidth||640,vh=video.videoHeight||480;
   const SCALES=[1,.85,.70,.55,.45,.38,.32,.27,.22,.18];
@@ -576,9 +832,13 @@ async function capturePhoto(){
   if(!running)return;
   flash.style.opacity='0.75';
   setTimeout(()=>{flash.style.opacity='0';},100);
+  // SX600は補正済みの1枚をそのまま保存する（既存モードの撮影時劣化は通さない）
+  const isSX=current==='sx600';
+  if(isSX)SX600.frame(true);
   const snap=document.createElement('canvas');
   snap.width=fcv.width;snap.height=fcv.height;
   const sCtx=snap.getContext('2d');
+  if(isSX){sCtx.drawImage(fcv,0,0);}else{
   sCtx.drawImage(fcv,0,0);sCtx.drawImage(ocv,0,0);
   const d=DEV[current];
   applyCA(sCtx,snap.width,snap.height,(d.caAmount||0)*1.4);
@@ -588,6 +848,7 @@ async function capturePhoto(){
   sCtx.drawImage(deg1,0,0);
   const deg2=await jpegDegrade(snap,JPEG_Q[current]+0.1);
   sCtx.drawImage(deg2,0,0);
+  }
 
   // BlobURLで管理（base64より大幅にメモリ効率が良い）
   snap.toBlob(blob=>{
@@ -596,7 +857,7 @@ async function capturePhoto(){
     addToStrip(blobUrl,'photo');
     updateGalleryGrid();
     showToast('撮影完了 — 長押しでカメラロールに保存');
-  },'image/jpeg',0.75);
+  },'image/jpeg',isSX?0.92:0.75);
 }
 
 // ===================== VIDEO RECORDING =====================
@@ -710,6 +971,8 @@ function renderShellPreview(){
           <div class="gvita-btn" style="background:#44aa44">×</div>
           <div class="gvita-btn" style="background:#cc8844">○</div>
         </div></div></div>`;
+  } else if(photo.device==='sx600'){
+    html=`<div class="gshell-sx600">${content}</div>`;
   } else {
     html=`<div class="gshell-dsi"><div class="gdtop">
       <div class="gdcam"></div><div class="gdlabel">Nintendo DSi</div>
@@ -806,6 +1069,8 @@ shutterBtn.addEventListener('mouseup',()=>{
 // ===================== DEVICE SWITCH =====================
 function switchDevice(dev){
   current=dev;
+  SX600.setActive(dev==='sx600');
+  if(dev==='sx600'){devLbl.textContent=SX600.label;return;}
   const d=DEV[dev];
   devLbl.textContent=d.label;
   setSlider('noise',d.noise);setSlider('res',d.res);
@@ -831,6 +1096,7 @@ document.querySelectorAll('.dev-tab').forEach(btn=>{
   });
 });
 document.getElementById('settings-btn').addEventListener('click',()=>{
+  if(current==='sx600'){SX600.togglePanel();return;}
   document.getElementById('settings-panel').classList.add('open');
 });
 document.getElementById('settings-close').addEventListener('click',()=>{
